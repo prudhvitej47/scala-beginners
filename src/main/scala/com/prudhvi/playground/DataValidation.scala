@@ -1,5 +1,8 @@
 package com.prudhvi.playground
 
+import cats.data.{Validated, ValidatedNel}
+import cats.implicits._
+
 object DataValidation extends App {
 	
 	// Version 0
@@ -83,4 +86,41 @@ object DataValidation extends App {
 	// Version 5
 	// if email and password are invalid we would only be informed about the email.
 	// How can we keep the syntax concise and let the errors aggregate?
+	
+	// toValid - if Option is Some then return the right value or else the left value
+	// mapN - maps tuple f:(A0, A1) => B
+	
+	def validateUserVersion5(userDTO: UserDTO): Validated[String, User] = (
+		Email(userDTO.email).toValid(emailError),
+		Password(userDTO.password).toValid(passwordError)
+	).mapN((email, password) => User(email, password))
+	
+	
+	// As a side note Validated also supports transformations to Option and Either
+	val x = validateUserVersion5(UserDTO("prudhvi", "xyz")).toOption
+	val y = validateUserVersion5(UserDTO("prudhvi", "xyz")).toEither
+	
+	
+	// Version 6
+	// Using Strings as Errors only works for Toy examples,
+	// what if we expect our errors to be domain specific and we want to add checks that depend on other checks passing?
+	// Let’s start by defining our domain errors:
+	
+	sealed trait UserError
+	final case object PasswordValidationError extends UserError
+	sealed trait EmailError extends UserError
+	final case object InvalidEmailError extends EmailError
+	final case object BlackListedUserError extends EmailError
+	
+	val blackListedUsers = Seq("prudhvi")
+	
+	// condNel(test,a:A,e:E) - If the condition is satisfied, return the given A as valid NEL, otherwise return the given E as invalid NEL.
+	def validatedEvilness(email: Email): ValidatedNel[UserError, Email] = {
+		Validated.condNel(!blackListedUsers.contains(email.value), email, BlackListedUserError)
+	}
+	
+	def validateUserVersion6(userDTO: UserDTO) = (
+		Email(userDTO.email).toValidNel(InvalidEmailError).andThen(validatedEvilness),
+		Password(userDTO.password).toValidNel(PasswordValidationError)
+	).mapN(User(_, _))
 }
